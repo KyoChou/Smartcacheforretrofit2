@@ -1,4 +1,7 @@
 apply plugin: 'com.android.library'
+apply plugin: 'com.github.dcendents.android-maven'
+
+group='com.github.KyoChou'
 
 android {
     compileSdkVersion 25
@@ -7,8 +10,8 @@ android {
     defaultConfig {
         minSdkVersion 15
         targetSdkVersion 25
-        versionCode 1
-        versionName "1.0"
+        versionCode 10
+        versionName "0.1.0"
     }
     buildTypes {
         release {
@@ -25,6 +28,6 @@ dependencies {
     compile 'com.squareup.retrofit2:retrofit:2.1.0'//修改成2.0版本
     compile 'com.squareup.retrofit2:converter-gson:2.1.0'
     compile 'com.squareup.retrofit2:adapter-rxjava:2.1.0'
-    compile 'com.android.support:appcompat-v7:23.4.0'
+    compile 'com.android.support:appcompat-v7:25.0.0'
     compile 'com.google.guava:guava:20.0'
 }
