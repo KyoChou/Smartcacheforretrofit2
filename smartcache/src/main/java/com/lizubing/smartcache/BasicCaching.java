@@ -16,6 +16,7 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.List;
 
+import okhttp3.CacheControl;
 import okhttp3.Request;
 import retrofit2.Response;
 
@@ -40,7 +41,7 @@ public class BasicCaching implements CachingSystem {
         }
 
         try{
-            diskCache = DiskLruCache.open(diskDirectory, 1, 1, maxDiskSize);
+            diskCache = DiskLruCache.open(diskDirectory, 1, 2, maxDiskSize);
         }catch(IOException exc){
             Log.e("SmartCall", "", exc);
             diskCache = null;
@@ -49,8 +50,8 @@ public class BasicCaching implements CachingSystem {
         memoryCache = new LruCache<>(memoryEntries);
     }
 
-    private static final long REASONABLE_DISK_SIZE = 1024 * 1024; // 1 MB
-    private static final int REASONABLE_MEM_ENTRIES = 50; // 50 entries
+    private static final long REASONABLE_DISK_SIZE = 1024 * 1024 * 10; // MB
+    private static final int REASONABLE_MEM_ENTRIES = 100; // entries
 
     /***
      * Constructs a BasicCaching system using settings that should work for everyone
@@ -73,6 +74,7 @@ public class BasicCaching implements CachingSystem {
         try {
             DiskLruCache.Editor editor = diskCache.edit(urlToKey(response.raw().request().url().url()));
             editor.set(0, new String(rawResponse, Charset.defaultCharset()));
+            editor.set(1, String.valueOf(System.currentTimeMillis() / 1000L + CacheControl.parse(response.headers()).maxAgeSeconds()));
             editor.commit();
         }catch(IOException exc){
             Log.e("SmartCall", "", exc);
@@ -80,19 +82,19 @@ public class BasicCaching implements CachingSystem {
     }
 
     @Override
-    public <T> byte[] getFromCache(Request request) {
+    public <T> Cache getFromCache(Request request) {
         String cacheKey = urlToKey(request.url().url());
         byte[] memoryResponse = (byte[]) memoryCache.get(cacheKey);
         if(memoryResponse != null){
             Log.d("SmartCall", "Memory hit!");
-            return memoryResponse;
+            return new Cache(memoryResponse, false);
         }
 
         try {
             DiskLruCache.Snapshot cacheSnapshot = diskCache.get(cacheKey);
             if(cacheSnapshot != null){
                 Log.d("SmartCall", "Disk hit!");
-                return cacheSnapshot.getString(0).getBytes();
+                return new Cache(cacheSnapshot.getString(0).getBytes(), System.currentTimeMillis() / 1000L > Long.valueOf(cacheSnapshot.getString(1)));
             }
         }catch(IOException exc){
             // ignore
@@ -103,13 +105,14 @@ public class BasicCaching implements CachingSystem {
                 String packageCache = CharStreams.toString(
                         new InputStreamReader(context.getAssets().open(PACKAGE_CACHE_DIR + "/" + cacheKey)));
                 Log.d("SmartCall", "Package hit!");
-                return packageCache.getBytes();
+                return new Cache(packageCache.getBytes(), true);
             } catch (IOException e) {
                 // ignore
             }
         }
 
-        return null;
+        Log.d("SmartCall", "No Cache hit!");
+        return new Cache(null, true);
     }
 
     private String urlToKey(URL url){

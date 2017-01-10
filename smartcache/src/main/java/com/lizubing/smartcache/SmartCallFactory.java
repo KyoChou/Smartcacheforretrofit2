@@ -1,5 +1,7 @@
 package com.lizubing.smartcache;
 
+import android.util.Log;
+
 import com.google.common.reflect.TypeToken;
 
 import java.io.IOException;
@@ -8,6 +10,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.concurrent.Executor;
 
 import okhttp3.Request;
@@ -22,12 +25,12 @@ public class SmartCallFactory extends CallAdapter.Factory {
     private final CachingSystem cachingSystem;
     private final Executor asyncExecutor;
 
-    public SmartCallFactory(CachingSystem cachingSystem){
+    public SmartCallFactory(CachingSystem cachingSystem) {
         this.cachingSystem = cachingSystem;
         this.asyncExecutor = new AndroidExecutor();
     }
 
-    public SmartCallFactory(CachingSystem cachingSystem, Executor executor){
+    public SmartCallFactory(CachingSystem cachingSystem, Executor executor) {
         this.cachingSystem = cachingSystem;
         this.asyncExecutor = executor;
     }
@@ -63,7 +66,7 @@ public class SmartCallFactory extends CallAdapter.Factory {
         };
     }
 
-    static class SmartCallImpl<T> implements SmartCall<T>{
+    static class SmartCallImpl<T> implements SmartCall<T> {
         private final Executor callbackExecutor;
         private final Call<T> baseCall;
         private final Type responseType;
@@ -73,7 +76,7 @@ public class SmartCallFactory extends CallAdapter.Factory {
         private final Request request;
 
         public SmartCallImpl(Executor callbackExecutor, Call<T> baseCall, Type responseType,
-                             Annotation[] annotations, Retrofit retrofit, CachingSystem cachingSystem){
+                             Annotation[] annotations, Retrofit retrofit, CachingSystem cachingSystem) {
             this.callbackExecutor = callbackExecutor;
             this.baseCall = baseCall;
             this.responseType = responseType;
@@ -89,7 +92,7 @@ public class SmartCallFactory extends CallAdapter.Factory {
          * Inspects an OkHttp-powered Call<T> and builds a Request
          * * @return A valid Request (that contains query parameters, right method and endpoint)
          */
-        private Request buildRequestFromCall(){
+        private Request buildRequestFromCall() {
             try {
                 Field argsField = baseCall.getClass().getDeclaredField("args");
                 argsField.setAccessible(true);
@@ -102,7 +105,7 @@ public class SmartCallFactory extends CallAdapter.Factory {
                 Method createMethod = requestFactory.getClass().getDeclaredMethod("toRequest", Object[].class);
                 createMethod.setAccessible(true);
                 return (Request) createMethod.invoke(requestFactory, new Object[]{args});
-            }catch(Exception exc){
+            } catch (Exception exc) {
 //                Log.e("buildRequestFromCall"+exc.toString());
                 return null;
             }
@@ -113,10 +116,11 @@ public class SmartCallFactory extends CallAdapter.Factory {
                 @Override
                 public void run() {
                     /* Read cache */
-                    byte[] data = cachingSystem.getFromCache(buildRequest());
-                    if(data != null) {
+                    final CachingSystem.Cache cache = cachingSystem.getFromCache(buildRequest());
+                    Log.d("Is Cache Overdue", String.valueOf(cache.isOverdue));
+                    if (cache.data != null) {
                         final T convertedData = SmartUtils.bytesToResponse(retrofit, responseType, annotations,
-                                data);
+                                cache.data);
                         Runnable cacheCallbackRunnable = new Runnable() {
                             @Override
                             public void run() {
@@ -127,37 +131,38 @@ public class SmartCallFactory extends CallAdapter.Factory {
                     }
 
                     /* Enqueue actual network call */
-                    baseCall.enqueue(new Callback<T>() {
-                        @Override
-                        public void onResponse(final Call<T> call,final Response<T> response) {
-                            Runnable responseRunnable = new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (response.isSuccessful()) {
+                    if (cache.isOverdue) {
+                        baseCall.enqueue(new Callback<T>() {
+                            @Override
+                            public void onResponse(final Call<T> call, final Response<T> response) {
+                                Runnable responseRunnable = new Runnable() {
+                                    @Override
+                                    public void run() {
                                         byte[] rawData = SmartUtils.responseToBytes(retrofit, response.body(),
                                                 responseType(), annotations);
                                         cachingSystem.addInCache(response, rawData);
+                                        if (!Arrays.equals(cache.data, rawData)) {
+                                            callback.onResponse(call, response);
+                                        }
                                     }
-                                    callback.onResponse(call, response);
-                                }
-                            };
-                            // Run it on the proper thread
-                            callbackExecutor.execute(responseRunnable);
-                        }
+                                };
+                                // Run it on the proper thread
+                                callbackExecutor.execute(responseRunnable);
+                            }
 
-                        @Override
-                        public void onFailure(final Call<T> call, final Throwable t) {
-                            Runnable failureRunnable = new Runnable() {
-                                @Override
-                                public void run() {
-                                    callback.onFailure(call,t);
-                                }
-                            };
-                            callbackExecutor.execute(failureRunnable);
-                        }
+                            @Override
+                            public void onFailure(final Call<T> call, final Throwable t) {
+                                Runnable failureRunnable = new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        callback.onFailure(call, t);
+                                    }
+                                };
+                                callbackExecutor.execute(failureRunnable);
+                            }
 
-                    });
-
+                        });
+                    }
                 }
             };
             Thread enqueueThread = new Thread(enqueueRunnable);
@@ -166,16 +171,16 @@ public class SmartCallFactory extends CallAdapter.Factory {
 
         @Override
         public void enqueue(final Callback<T> callback) {
-            if(buildRequest().method().equals("GET")){
+            if (buildRequest().method().equals("GET")) {
                 enqueueWithCache(callback);
-            }else{
+            } else {
                 baseCall.enqueue(new Callback<T>() {
                     @Override
                     public void onResponse(final Call<T> call, final Response<T> response) {
                         callbackExecutor.execute(new Runnable() {
                             @Override
                             public void run() {
-                                callback.onResponse(call,response);
+                                callback.onResponse(call, response);
                             }
                         });
                     }
@@ -185,7 +190,7 @@ public class SmartCallFactory extends CallAdapter.Factory {
                         callbackExecutor.execute(new Runnable() {
                             @Override
                             public void run() {
-                                callback.onFailure(call,t);
+                                callback.onFailure(call, t);
                             }
                         });
                     }
