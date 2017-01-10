@@ -7,13 +7,9 @@ import com.lizubing.smartcache.BasicCaching;
 import com.lizubing.smartcache.SmartCallFactory;
 import com.lizubing.smartcacheforretrofit2.MyApplication;
 
-import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
-import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 import retrofit2.Retrofit;
 import retrofit2.adapter.rxjava.RxJavaCallAdapterFactory;
 import retrofit2.converter.gson.GsonConverterFactory;
@@ -23,7 +19,7 @@ import retrofit2.converter.gson.GsonConverterFactory;
  * 支持Rxjava Observable
  */
 public class MainFactory {
-    public static final String HOST = "http://www.tngou.net/";
+    public static final String HOST = "http://192.168.1.99:8000/";
 
     private static MeoHttp mGuDong;
 
@@ -36,23 +32,12 @@ public class MainFactory {
                         .setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
                         .create();
                 SmartCallFactory smartFactory = new SmartCallFactory(BasicCaching.fromCtx(MyApplication.getContext()));
-                //实现拦截器，设置请求头
-                Interceptor interceptorImpl = new Interceptor() {
-                    @Override
-                    public Response intercept(Chain chain) throws IOException {
-                        Request request = chain.request();
-                        Request compressedRequest = request.newBuilder()
-                                .header("X-Requested-With", "XMLHttpRequest")
-                                .build();
-                        return chain.proceed(compressedRequest);
-                    }
-                };
+
                 //设置OKHttpClient
                 OkHttpClient.Builder httpClientBuilder = new OkHttpClient.Builder()
                         .connectTimeout(2, TimeUnit.SECONDS)
                         .writeTimeout(60, TimeUnit.SECONDS)
-                        .readTimeout(60, TimeUnit.SECONDS)
-                        .addInterceptor(interceptorImpl);//创建OKHttpClient的Builder
+                        .readTimeout(60, TimeUnit.SECONDS);
                 //build OKHttpClient
                 OkHttpClient okHttpClient = httpClientBuilder.build();
                 Retrofit client = new Retrofit.Builder()

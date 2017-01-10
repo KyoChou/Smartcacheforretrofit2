@@ -13,4 +13,7 @@ public interface MeoHttp {
     @GET("tnfs/api/list")
     SmartCall<ImageListBean> getImageList();
 
+    @GET("api/news/categories")
+    SmartCall<ListData> getCategories();
+
 }

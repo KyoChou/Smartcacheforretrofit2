@@ -1,10 +1,11 @@
 package com.lizubing.smartcacheforretrofit2;
 
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.widget.ListView;
 
-import com.lizubing.smartcacheforretrofit2.retrofit.ImageListBean;
+import com.lizubing.smartcacheforretrofit2.retrofit.ListData;
 import com.lizubing.smartcacheforretrofit2.retrofit.MainFactory;
 
 import retrofit2.Call;
@@ -25,15 +26,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initData() {
-        MainFactory.getInstance().getImageList().enqueue(new Callback<ImageListBean>() {
+        MainFactory.getInstance().getCategories().enqueue(new Callback<ListData>() {
             @Override
-            public void onResponse(Call<ImageListBean> call, Response<ImageListBean> response) {
-                adapter.setData(response.body().getTngou());
+            public void onResponse(Call<ListData> call, Response<ListData> response) {
+                Log.d("getCategories", response.raw().toString());
             }
 
             @Override
-            public void onFailure(Call<ImageListBean> call, Throwable t) {
-
+            public void onFailure(Call<ListData> call, Throwable t) {
+                Log.d("getCategories", t.getMessage());
             }
         });
     }
